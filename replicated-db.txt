@@ -1,0 +1,17 @@
+-module(replicated_db).
+-export([start/2, stop/0]).
+
+start(Name, N) ->
+    ReplicaNames = [list_to_atom(atom_to_list(Name) ++ "-" ++ integer_to_list(I)) || I <- lists:seq(1, N)],
+    % Iniciar cada réplica con la lista de las demás réplicas
+    lists:foreach(fun(ReplicaName) ->
+        OtherReplicas = ReplicaNames -- [ReplicaName],
+        replica:start(ReplicaName, OtherReplicas)
+    end, ReplicaNames),
+    ok.
+
+stop() ->
+    % Detener todas las réplicas registradas
+    lists:foreach(fun(Registered) ->
+        replica:stop(Registered)
+    end, registered()).

@@ -1,0 +1,110 @@
+-module(dictionary).
+-export([start/1, stop/0, put/3, rem/2, get/1, size/0]).
+
+start(Name) ->
+    case whereis(Name) of
+        undefined ->
+            Pid = spawn(fun() -> loop(dict:new(), dict:new()) end),
+            register(Name, Pid),
+            ok;
+        _ ->
+            {error, already_started}
+    end.
+
+stop() ->
+    case whereis(dictionary) of
+        undefined -> ok;
+        Pid ->
+            Pid ! stop,
+            ok
+    end.
+
+put(Key, Value, Timestamp) ->
+    dictionary ! {put, Key, Value, Timestamp, self()},
+    receive
+        Response -> Response
+    end.
+
+rem(Key, Timestamp) ->
+    dictionary ! {rem, Key, Timestamp, self()},
+    receive
+        Response -> Response
+    end.
+
+get(Key) ->
+    dictionary ! {get, Key, self()},
+    receive
+        Response -> Response
+    end.
+
+size() ->
+    dictionary ! {size, self()},
+    receive
+        Size -> Size
+    end.
+
+% Loop principal que maneja el estado del diccionario
+% State es el diccionario activo
+% Tombstones es el diccionario de elementos eliminados
+loop(State, Tombstones) ->
+    receive
+        {put, Key, Value, Timestamp, From} ->
+            case check_timestamp(Key, Timestamp, State, Tombstones) of
+                true ->
+                    NewState = dict:store(Key, {Value, Timestamp}, State),
+                    From ! ok,
+                    loop(NewState, Tombstones);
+                false ->
+                    From ! ko,
+                    loop(State, Tombstones)
+            end;
+
+        {rem, Key, Timestamp, From} ->
+            case dict:find(Key, State) of
+                {ok, {_, OldTS}} when Timestamp > OldTS ->
+                    NewState = dict:erase(Key, State),
+                    NewTombstones = dict:store(Key, Timestamp, Tombstones),
+                    From ! ok,
+                    loop(NewState, NewTombstones);
+                error ->
+                    NewTombstones = dict:store(Key, Timestamp, Tombstones),
+                    From ! notfound,
+                    loop(State, NewTombstones);
+                _ ->
+                    From ! ko,
+                    loop(State, Tombstones)
+            end;
+
+        {get, Key, From} ->
+            case dict:find(Key, State) of
+                {ok, {Value, TS}} ->
+                    From ! {ok, Value, TS};
+                error ->
+                    case dict:find(Key, Tombstones) of
+                        {ok, TS} ->
+                            From ! {ko, TS};
+                        error ->
+                            From ! notfound
+                    end
+            end,
+            loop(State, Tombstones);
+
+        {size, From} ->
+            From ! dict:size(State),
+            loop(State, Tombstones);
+
+        stop ->
+            ok
+    end.
+
+% Función auxiliar para verificar timestamps
+check_timestamp(Key, NewTS, State, Tombstones) ->
+    case dict:find(Key, Tombstones) of
+        {ok, TombstoneTS} when NewTS =< TombstoneTS ->
+            false;
+        _ ->
+            case dict:find(Key, State) of
+                {ok, {_, OldTS}} -> NewTS > OldTS;
+                error -> true
+            end
+    end.

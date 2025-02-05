@@ -1,0 +1,114 @@
+-module(replica).
+-export([start/2, stop/1, put/5, rem/4, get/3]).
+
+start(Name, OtherReplicas) ->
+    case whereis(Name) of
+        undefined ->
+            Pid = spawn(fun() -> loop(dict:new(), dict:new(), OtherReplicas) end),
+            register(Name, Pid),
+            ok;
+        _ ->
+            {error, already_started}
+    end.
+
+stop(Name) ->
+    case whereis(Name) of
+        undefined -> ok;
+        Pid ->
+            Pid ! stop,
+            ok
+    end.
+
+put(Key, Value, Timestamp, Consistency, Coordinator) ->
+    Coordinator ! {put_request, Key, Value, Timestamp, Consistency, self()},
+    receive
+        Response -> Response
+    end.
+
+rem(Key, Timestamp, Consistency, Coordinator) ->
+    Coordinator ! {rem_request, Key, Timestamp, Consistency, self()},
+    receive
+        Response -> Response
+    end.
+
+get(Key, Consistency, Coordinator) ->
+    Coordinator ! {get_request, Key, Consistency, self()},
+    receive
+        Response -> Response
+    end.
+
+loop(State, Tombstones, OtherReplicas) ->
+    receive
+        % Manejo de solicitudes como coordinador
+        {put_request, Key, Value, Timestamp, Consistency, From} ->
+            handle_put_request(Key, Value, Timestamp, Consistency, From, State, Tombstones, OtherReplicas);
+        
+        {rem_request, Key, Timestamp, Consistency, From} ->
+            handle_rem_request(Key, Timestamp, Consistency, From, State, Tombstones, OtherReplicas);
+        
+        {get_request, Key, Consistency, From} ->
+            handle_get_request(Key, Consistency, From, State, Tombstones, OtherReplicas);
+
+        % Manejo de replicación
+        {replicate_put, Key, Value, Timestamp, From} ->
+            NewState = handle_local_put(Key, Value, Timestamp, State, Tombstones),
+            From ! {put_response, ok},
+            loop(NewState, Tombstones, OtherReplicas);
+
+        {replicate_rem, Key, Timestamp, From} ->
+            {NewState, NewTombstones} = handle_local_rem(Key, Timestamp, State, Tombstones),
+            From ! {rem_response, ok},
+            loop(NewState, NewTombstones, OtherReplicas);
+
+        {replicate_get, Key, From} ->
+            Response = handle_local_get(Key, State, Tombstones),
+            From ! {get_response, Response},
+            loop(State, Tombstones, OtherReplicas);
+
+        stop ->
+            ok
+    end.
+
+% Funciones auxiliares para manejar las solicitudes según el nivel de consistencia
+handle_put_request(Key, Value, Timestamp, one, From, State, Tombstones, _OtherReplicas) ->
+    NewState = handle_local_put(Key, Value, Timestamp, State, Tombstones),
+    From ! ok,
+    loop(NewState, Tombstones, _OtherReplicas);
+
+handle_put_request(Key, Value, Timestamp, Consistency, From, State, Tombstones, OtherReplicas) ->
+    Required = required_responses(Consistency, length(OtherReplicas)),
+    NewState = handle_local_put(Key, Value, Timestamp, State, Tombstones),
+    broadcast_and_wait(replicate_put, [Key, Value, Timestamp], Required, OtherReplicas),
+    From ! ok,
+    loop(NewState, Tombstones, OtherReplicas).
+
+% Funciones similares para rem y get...
+
+% Funciones auxiliares
+required_responses(quorum, ReplicaCount) ->
+    (ReplicaCount div 2) + 1;
+required_responses(all, ReplicaCount) ->
+    ReplicaCount.
+
+broadcast_and_wait(Operation, Args, Required, Replicas) ->
+    lists:foreach(fun(Replica) ->
+        Replica ! {Operation, Args ++ [self()]}
+    end, Replicas),
+    wait_responses(Required).
+
+wait_responses(0) -> ok;
+wait_responses(Count) ->
+    receive
+        {_Response, _Result} ->
+            wait_responses(Count - 1)
+    after 5000 ->
+        timeout
+    end.
+
+handle_local_put(Key, Value, Timestamp, State, Tombstones) ->
+    case check_timestamp(Key, Timestamp, State, Tombstones) of
+        true -> dict:store(Key, {Value, Timestamp}, State);
+        false -> State
+    end.
+
+% Implementar funciones similares para handle_local_rem y handle_local_get

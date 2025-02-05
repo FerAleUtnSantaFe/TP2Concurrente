@@ -1,0 +1,30 @@
+-module(replicated_db_tests).
+-include_lib("eunit/include/eunit").
+
+setup() ->
+    replicated_db:start(test_db, 3).
+
+cleanup(_) ->
+    replicated_db:stop().
+
+basic_test_() ->
+    {setup,
+     fun setup/0,
+     fun cleanup/1,
+     [
+        ?_assertEqual(ok, replica:put(key1, value1, 1, one, 'test_db-1')),
+        ?_assertEqual({ok, value1, 1}, replica:get(key1, one, 'test_db-1')),
+        ?_assertEqual(ok, replica:rem(key1, 2, one, 'test_db-1')),
+        ?_assertEqual({ko, 2}, replica:get(key1, one, 'test_db-1'))
+     ]}.
+
+quorum_test_() ->
+    {setup,
+     fun setup/0,
+     fun cleanup/1,
+     [
+        ?_assertEqual(ok, replica:put(key2, value2, 1, quorum, 'test_db-1')),
+        ?_assertEqual({ok, value2, 1}, replica:get(key2, quorum, 'test_db-2'))
+     ]}.
+
+% Agregar más tests para diferentes escenarios
