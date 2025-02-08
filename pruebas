@@ -1,6 +1,6 @@
 %--------------Prueba de datos para base no replicada--------------%
 %Compila y ejecuta el módulo
-cd("C:/Users/Ale/Downloads"). %este primero es para que te ande el erlang y se puede ejecutar el script, sacar este comentario cuando se copia y se pega en la shell de erlang
+cd("C:/Users/Ale/Downloads").
 c(base_no_replicada).
 base_no_replicada:start(base).
 
@@ -18,3 +18,20 @@ base_no_replicada:sizee().
 
 %Detiene el sistema
 base_no_replicada:stop().
+
+%--------------Prueba de datos para base replicada--------------%
+%Compila y ejecuta el módulo
+cd("C:/Users/Ale/Downloads").
+c(replica_server).
+c(base_de_datos).
+base_de_datos:test().
+base_de_datos:test1().
+base_de_datos:test2().
+base_de_datos:test3().
+base_de_datos:test4().
+base_de_datos:test5().
+base_de_datos:test6().
+base_de_datos:test7().
+base_de_datos:test8().
+base_de_datos:test9().
+base_de_datos:test10().
