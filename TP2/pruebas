@@ -1,0 +1,37 @@
+%--------------Prueba de datos para base no replicada--------------%
+%Compila y ejecuta el módulo
+cd("C:/Users/Ale/Downloads").
+c(base_no_replicada).
+base_no_replicada:start(base).
+
+%Prueba las operaciones básicas
+base_no_replicada:putt(a, 100, 1).
+base_no_replicada:putt(b, 200, 2).
+base_no_replicada:putt(c, 300, 3).
+base_no_replicada:gett(a).
+base_no_replicada:sizee().
+base_no_replicada:remm(a, 2).
+base_no_replicada:gett(a).
+base_no_replicada:remall().
+base_no_replicada:inspect_dict().
+base_no_replicada:sizee().
+
+%Detiene el sistema
+base_no_replicada:stop().
+
+%--------------Prueba de datos para base replicada--------------%
+%Compila y ejecuta el módulo
+cd("C:/Users/Ale/Downloads").
+c(replica_server).
+c(base_de_datos).
+base_de_datos:test().
+base_de_datos:test1().
+base_de_datos:test2().
+base_de_datos:test3().
+base_de_datos:test4().
+base_de_datos:test5().
+base_de_datos:test6().
+base_de_datos:test7().
+base_de_datos:test8().
+base_de_datos:test9().
+base_de_datos:test10().
